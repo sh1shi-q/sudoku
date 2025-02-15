@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Auto-Solver</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background-color: #f9f9f9; 
+            padding: 20px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { color: #333; }
+        
+        #board { 
+            display: inline-grid; 
+            grid-template-columns: repeat(9, 50px); 
+            grid-template-rows: repeat(9, 50px); 
+            border: 3px solid #000; 
+            background-color: #000; 
+            gap: 1px; 
+            margin-bottom: 20px;
+        }
+        
+        .cell { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            text-align: center; 
+            font-size: 24px; 
+            font-weight: bold; 
+            background-color: #fff; 
+            outline: none; 
+            box-sizing: border-box;
+        }
+        
+        .cell:focus { background-color: #e0f7fa; }
+        .cell.readonly { background-color: #f0f0f0; color: #0044cc; }
+        .cell.solved { color: #008000; }
+        .cell.error { color: #dc3545; background-color: #f8d7da; }
+        
+        .controls { margin-top: 20px; }
+        button { 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            margin: 0 5px; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 5px; 
+            background-color: #007bff; 
+            color: white; 
+            transition: 0.2s; 
+        }
+        button:hover { background-color: #0056b3; }
+        button.clear { background-color: #dc3545; }
+        button.clear:hover { background-color: #a71d2a; }
+    </style>
+</head>
+<body>
+    <h1>Sudoku Game & Auto-Solver</h1>
+    <div id="board"></div>
+    <div class="controls">
+        <button onclick="generatePuzzle()">Generate Puzzle</button>
+        <button onclick="autoSolve()">Auto-Solve</button>
+        <button class="clear" onclick="clearGrid()">Clear</button>
+    </div>
+
+    <script>
+        const boardElement = document.getElementById('board');
+        const cells = [];
+        let solutionBoard = []; // Store the correct solution
+
+        // Initialize 9x9 Grid UI
+        for (let row = 0; row < 9; row++) {
+            cells[row] = [];
+            for (let col = 0; col < 9; col++) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 1;
+                input.className = 'cell';
+                
+                // Add thicker borders for 3x3 blocks
+                if (col % 3 === 2 && col !== 8) input.style.borderRight = '2px solid #000';
+                if (row % 3 === 2 && row !== 8) input.style.borderBottom = '2px solid #000';
+
+                // Restrict input to 1-9 and check against solution
+                input.oninput = (e) => {
+                    const val = e.target.value;
+                    input.classList.remove('error'); // Reset error status
+                    
+                    if (!/^[1-9]$/.test(val)) {
+                        e.target.value = '';
+                        return;
+                    }
+                    
+                    if (solutionBoard.length > 0) {
+                        // Check if entered value is wrong
+                        if (parseInt(val) !== solutionBoard[row][col]) {
+                            input.classList.add('error');
+                        } else {
+                            // If correct, check if the game is won
+                            checkWin();
+                        }
+                    }
+                };
+
+                cells[row][col] = input;
+                boardElement.appendChild(input);
+            }
+        }
+
+        // Clear the entire grid
+        function clearGrid() {
+            solutionBoard = []; // Reset solution board
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    cells[row][col].value = '';
+                    cells[row][col].readOnly = false;
+                    cells[row][col].classList.remove('readonly', 'solved', 'error');
+                }
+            }
+        }
+
+        // Fill with a newly generated random puzzle
+        function generatePuzzle() {
+            clearGrid();
+            
+            const board = Array.from({ length: 9 }, () => Array(9).fill(0));
+            fillBoardRandomly(board); // Generates a full solved board
+            
+            // Save the solution so we can validate player inputs
+            solutionBoard = board.map(r => [...r]);
+            
+            // Remove random cells to turn the solved board into a game board (leaving 40 to 50 empty cells)
+            let cellsToRemove = Math.floor(Math.random() * 11) + 40; // 40 to 50 empty cells
+            while (cellsToRemove > 0) {
+                let r = Math.floor(Math.random() * 9);
+                let c = Math.floor(Math.random() * 9);
+                if (board[r][c] !== 0) {
+                    board[r][c] = 0;
+                    cellsToRemove--;
+                }
+            }
+
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (board[row][col] !== 0) {
+                        cells[row][col].value = board[row][col];
+                        cells[row][col].readOnly = true;
+                        cells[row][col].classList.add('readonly');
+                    }
+                }
+            }
+        }
+
+        // Helper to generate a full valid board via randomized backtracking
+        function fillBoardRandomly(board) {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (board[row][col] === 0) {
+                        // Shuffle numbers 1-9 to ensure unique puzzles
+                        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+                        for (let i = nums.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [nums[i], nums[j]] = [nums[j], nums[i]];
+                        }
+                        
+                        for (let num of nums) {
+                            if (isValid(board, row, col, num)) {
+                                board[row][col] = num;
+                                if (fillBoardRandomly(board)) return true;
+                                board[row][col] = 0; // Backtrack
+                            }
+                        }
+                        return false; 
+                    }
+                }
+            }
+            return true; 
+        }
+
+        // Grab current board state and trigger solving
+        function autoSolve() {
+            const boardConfig = [];
+            for (let row = 0; row < 9; row++) {
+                boardConfig[row] = [];
+                for (let col = 0; col < 9; col++) {
+                    const val = cells[row][col].value;
+                    // Ignore anything the user got wrong when finding a solution
+                    boardConfig[row][col] = (val && !cells[row][col].classList.contains('error')) ? parseInt(val) : 0;
+                }
+            }
+
+            if (solve(boardConfig)) {
+                for (let row = 0; row < 9; row++) {
+                    for (let col = 0; col < 9; col++) {
+                        if (!cells[row][col].classList.contains('readonly') && !cells[row][col].classList.contains('solved')) {
+                            cells[row][col].value = boardConfig[row][col];
+                            cells[row][col].classList.remove('error');
+                            cells[row][col].classList.add('solved');
+                        }
+                    }
+                }
+            } else {
+                alert("No solution exists for the given setup!");
+            }
+        }
+
+        // Backtracking Algorithm to solve the board
+        function solve(board) {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    if (board[row][col] === 0) {
+                        for (let num = 1; num <= 9; num++) {
+                            if (isValid(board, row, col, num)) {
+                                board[row][col] = num;
+                                if (solve(board)) return true;
+                                board[row][col] = 0; // Backtrack
+                            }
+                        }
+                        return false; // Trigger backtracking 
+                    }
+                }
+            }
+            return true; // Fully solved
+        }
+
+        // Helper check for the Backtracking auto-solver
+        function isValid(board, row, col, num) {
+            // Check row and column
+            for (let i = 0; i < 9; i++) {
+                if (board[row][i] === num) return false;
+                if (board[i][col] === num) return false;
+            }
+            // Check 3x3 block
+            const startRow = row - (row % 3);
+            const startCol = col - (col % 3);
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (board[i + startRow][j + startCol] === num) return false;
+                }
+            }
+            return true;
+        }
+
+        // Check if player completed the puzzle correctly
+        function checkWin() {
+            // Need a tiny delay to ensure the UI paints the last typed number before the alert
+            setTimeout(() => {
+                let won = true;
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (!cells[r][c].value || cells[r][c].classList.contains('error')) {
+                            won = false;
+                        }
+                    }
+                }
+                
+                if (won) {
+                    alert("🎉 Congratulations! You have successfully solved the puzzle!");
+                }
+            }, 50);
+        }
+
+        // Start game with a puzzle generated
+        window.onload = generatePuzzle;
+    </script>
+</body>
+</html>
